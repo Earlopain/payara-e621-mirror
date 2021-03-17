@@ -42,33 +42,38 @@ public class GetNewPostsTimer {
 	}
 
 	@Schedule(minute = "*/2", hour = "*", persistent = false)
-	public void getNewPosts() throws InterruptedException, IOException {
-		int targetId = getLatestApi();
-		int currentId = dbHighestPost;
-		if (targetId == currentId) {
-			return;
-		}
-		LOG.info(String.format("Getting new posts %s-%s", currentId + 1, targetId));
-
-		while (currentId != targetId) {
-			List<PostApi> posts = client.getPostsByTagsAfterId(List.of("status:any"), currentId, 320).unwrap();
-
-			for (PostApi post : posts) {
-				mirror.findOrCreatePost(post);
-				// send to db an clear refenreces in the em, Posts can have large blobs
-				// associated with them, no need to fill the heap with that
-				em.flush();
-				em.clear();
+	public void getNewPosts() {
+		try {
+			int targetId = getLatestApi();
+			int currentId = dbHighestPost;
+			if (targetId == currentId) {
+				return;
 			}
-			int newCurrentId = posts.stream().mapToInt(post -> post.getId()).max().getAsInt();
-			if (newCurrentId == currentId) {
-				LOG.warning(String.format("Loop while getting %s, going from %s-%s", currentId, dbHighestPost + 1, targetId));
-				break;
+			LOG.info(String.format("Getting new posts %s-%s", currentId + 1, targetId));
+
+			while (currentId != targetId) {
+				List<PostApi> posts = client.getPostsByTagsAfterId(List.of("status:any"), currentId, 320).unwrap();
+
+				for (PostApi post : posts) {
+					mirror.findOrCreatePost(post);
+					// send to db an clear refenreces in the em, Posts can have large blobs
+					// associated with them, no need to fill the heap with that
+					em.flush();
+					em.clear();
+				}
+				int newCurrentId = posts.stream().mapToInt(post -> post.getId()).max().getAsInt();
+				if (newCurrentId == currentId) {
+					LOG.warning(String.format("Loop while getting %s, going from %s-%s", currentId, dbHighestPost + 1, targetId));
+					break;
+				}
+				currentId = newCurrentId;
 			}
-			currentId = newCurrentId;
+			dbHighestPost = targetId;
+			LOG.info("Finished getting new posts");
+		} catch (Exception e) {
+			e.printStackTrace();
+			em.getTransaction().setRollbackOnly();
 		}
-		dbHighestPost = targetId;
-		LOG.info("Finished getting new posts");
 	}
 
 	private int getLatestApi() throws InterruptedException, IOException {
