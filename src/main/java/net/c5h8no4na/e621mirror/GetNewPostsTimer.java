@@ -51,7 +51,7 @@ public class GetNewPostsTimer {
 			}
 			LOG.info(String.format("Getting new posts %s-%s", currentId + 1, targetId));
 
-			while (currentId != targetId) {
+			while (currentId < targetId) {
 				List<PostApi> posts = client.getPostsByTagsAfterId(List.of("status:any"), currentId, 320).unwrap();
 
 				for (PostApi post : posts) {
@@ -61,6 +61,7 @@ public class GetNewPostsTimer {
 					em.flush();
 					em.clear();
 				}
+
 				int newCurrentId = posts.stream().mapToInt(post -> post.getId()).max().getAsInt();
 				if (newCurrentId == currentId) {
 					LOG.warning(String.format("Loop while getting %s, going from %s-%s", currentId, dbHighestPost + 1, targetId));
@@ -68,7 +69,7 @@ public class GetNewPostsTimer {
 				}
 				currentId = newCurrentId;
 			}
-			dbHighestPost = targetId;
+			dbHighestPost = currentId;
 			LOG.info("Finished getting new posts");
 		} catch (Exception e) {
 			e.printStackTrace();
