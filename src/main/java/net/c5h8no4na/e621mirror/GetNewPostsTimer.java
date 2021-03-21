@@ -44,32 +44,29 @@ public class GetNewPostsTimer {
 	@Schedule(minute = "*/2", hour = "*", persistent = false)
 	public void getNewPosts() {
 		try {
+			int perPage = 10;
 			int targetId = getLatestApi();
-			int currentId = dbHighestPost;
-			if (targetId == currentId) {
+			// Adjust target id to the per page limit
+			if (targetId - dbHighestPost > perPage) {
+				targetId = dbHighestPost + perPage;
+			}
+			if (targetId == dbHighestPost) {
 				return;
 			}
-			LOG.info(String.format("Getting new posts %s-%s", currentId + 1, targetId));
 
-			while (currentId < targetId) {
-				List<PostApi> posts = client.getPostsByTagsAfterId(List.of("status:any"), currentId, 320).unwrap();
+			LOG.info(String.format("Getting new posts %s-%s", dbHighestPost + 1, targetId));
 
-				for (PostApi post : posts) {
-					mirror.findOrCreatePost(post);
-					// send to db an clear refenreces in the em, Posts can have large blobs
-					// associated with them, no need to fill the heap with that
-					em.flush();
-					em.clear();
-				}
+			List<PostApi> posts = client.getPostsByTagsAfterId(List.of("status:any"), dbHighestPost, perPage).unwrap();
 
-				int newCurrentId = posts.stream().mapToInt(post -> post.getId()).max().getAsInt();
-				if (newCurrentId == currentId) {
-					LOG.warning(String.format("Loop while getting %s, going from %s-%s", currentId, dbHighestPost + 1, targetId));
-					break;
-				}
-				currentId = newCurrentId;
+			for (PostApi post : posts) {
+				mirror.findOrCreatePost(post);
+				// send to db an clear refenreces in the em, Posts can have large blobs
+				// associated with them, no need to fill the heap with that
+				em.flush();
+				em.clear();
 			}
-			dbHighestPost = currentId;
+
+			dbHighestPost = posts.stream().mapToInt(PostApi::getId).max().getAsInt();
 			LOG.info("Finished getting new posts");
 		} catch (Exception e) {
 			e.printStackTrace();
