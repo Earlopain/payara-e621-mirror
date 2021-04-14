@@ -65,8 +65,7 @@ public class GetNewPostsTimer {
 				em.flush();
 				em.clear();
 			}
-
-			dbHighestPost = posts.stream().mapToInt(PostApi::getId).max().getAsInt();
+			dbHighestPost = targetId;
 			LOG.info("Finished getting new posts");
 		} catch (Exception e) {
 			e.printStackTrace();
